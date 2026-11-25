@@ -1,0 +1,30 @@
+{
+  "name": "dnd-dom-extract",
+  "version": "0.1.0",
+  "description": "Extrait un JSON de personnage D&D 5e depuis le DOM d'une page D&D Beyond enregistrée",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "dnd-dom-extract": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx",
+    "extract": "tsx src/cli.ts",
+    "test": "tsx test/extract.test.ts && tsc --noEmit"
+  },
+  "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "jsdom": "^28.0.0"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

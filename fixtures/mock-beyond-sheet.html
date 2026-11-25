@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>D&amp;D Beyond Character Sheet</title>
+</head>
+<body>
+  <main>
+    <!-- JSON embarqué, tel qu'il apparaît dans les pages complètes DDB -->
+    <script type="text/javascript">
+      var characters = {};
+      characters["12345678"] = {
+        "id": 12345678,
+        "name": "Damaia Dread",
+        "data": {
+          "level": 2,
+          "xp": 300,
+          "alignmentName": "Chaotic Good",
+          "race": { "fullName": "Tiefling" },
+          "background": { "definition": { "name": "Charlatan" } },
+          "classes": [
+            {
+              "definition": { "name": "Bard" },
+              "level": 2,
+              "subclassDefinition": { "name": "College of Lore" }
+            }
+          ],
+          "abilities": [
+            { "id": 1, "name": "STR", "score": 9,  "modifier": -1, "save": -1, "proficient": false },
+            { "id": 2, "name": "DEX", "score": 14, "modifier": 2,  "save": 2,  "proficient": false },
+            { "id": 3, "name": "CON", "score": 15, "modifier": 2,  "save": 2,  "proficient": false },
+            { "id": 4, "name": "INT", "score": 10, "modifier": 0,  "save": 0,  "proficient": false },
+            { "id": 5, "name": "WIS", "score": 12, "modifier": 1,  "save": 1,  "proficient": false },
+            { "id": 6, "name": "CHA", "score": 16, "modifier": 3,  "save": 5,  "proficient": true }
+          ],
+          "proficiencyBonus": 2,
+          "armorClass": 13,
+          "initiative": 2,
+          "speed": "30 ft.",
+          "passivePerception": 12,
+          "hitPointInfo": { "current": 17, "maximum": 17, "temporary": 0, "hitDice": 8, "hitDiceCount": 2 },
+          "deathSaveInfo": { "successCount": 0, "failCount": 0 },
+          "currencies": { "cp": 10, "sp": 5, "ep": 0, "gp": 25, "pp": 0 }
+        }
+      };
+      // Une accolade « } » dans une chaîne pour le test de robustesse
+      console.log("} = fin d'objet chez les autres parseurs");
+    </script>
+
+    <!--
+      Markup avec ancres textuelles (reproduction du flux D&D Beyond) :
+      nom en h1, ancres "Strength"/"str" puis signe, modifier, score, etc.
+    -->
+    <h1>Oros Telluros</h1>
+    <div><span>Earth Genasi</span><span>Druid 2</span><span>Level 2</span></div>
+
+    <div class="abilities">
+      <div><span>Strength</span><span>str</span><span>+</span><span>1</span><span>13</span></div>
+      <div><span>Dexterity</span><span>dex</span><span>+</span><span>1</span><span>12</span></div>
+      <div><span>Constitution</span><span>con</span><span>+</span><span>3</span><span>16</span></div>
+      <div><span>Intelligence</span><span>int</span><span>+</span><span>0</span><span>10</span></div>
+      <div><span>Wisdom</span><span>wis</span><span>+</span><span>3</span><span>16</span></div>
+      <div><span>Charisma</span><span>cha</span><span>-</span><span>1</span><span>8</span></div>
+    </div>
+
+    <div class="saving-throws">
+      <span aria-label="Proficient"><span>Strength Saving Throw</span><span>str</span><span>+</span><span>1</span></span>
+      <span aria-label="Not Proficient"><span>Dexterity Saving Throw</span><span>dex</span><span>+</span><span>1</span></span>
+    </div>
+
+    <div class="skills">
+      <span aria-label="Not Proficient"><span>DEX</span><span>Acrobatics</span><span>+</span><span>1</span></span>
+      <span aria-label="Proficient"><span>WIS</span><span>Animal Handling</span><span>+</span><span>3</span></span>
+    </div>
+
+    <div class="combat">
+      <span>Initiative</span><span>Initiative</span><span>+</span><span>1</span>
+      <span>Armor Class</span><span>Armor</span><span>13</span><span>Class</span>
+    </div>
+    <div class="hp">
+      <span>Hit Points</span><span>Current</span><span>19</span><span>/</span><span>Max</span><span>19</span><span>Temp</span><span>--</span>
+    </div>
+    <div><span>Speed</span><span>Walking</span><span>30</span><span>ft.</span></div>
+    <div><span>Proficiency</span><span>Bonus</span><span>+</span><span>2</span></div>
+  </main>
+</body>
+</html>
