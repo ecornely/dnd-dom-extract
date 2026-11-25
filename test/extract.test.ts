@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { extractCharacter, extractFromDom, findEmbeddedCharacters, mapActions, mapActionsFromDom } from "../src/index.js";
+import { extractCharacter, extractFromDom, findEmbeddedCharacters, loadExtractRules, mapActions, mapActionsFromDom, normalizeExtractRules, sourcesFromDump } from "../src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixturePath = join(here, "..", "fixtures", "mock-beyond-sheet.html");
@@ -218,6 +218,91 @@ test("export v5 (responses + domHtml) : calculé du DOM, brut de l'API, fusion s
   assert.deepEqual(c.classes, [{ name: "Druid", level: 2, subclass: null }]);
   assert.deepEqual(c.coins, { cp: 10, sp: 5, ep: 0, gp: 25, pp: 0 });
   assert.equal(c.background, "Charlatan");
+});
+
+// ---------- Règles de filtrage (rules.json : contenu de campagne non affiché) ----------
+
+/** Dump avec feats (dont du contenu de campagne) + réponse rule-data. */
+function buildDumpWithFeats(): string {
+  const dump = JSON.parse(buildDump()) as {
+    responses: { payload: { data: Record<string, unknown> } }[];
+  };
+  const feat = (name: string, sourceId: number) => ({
+    componentTypeId: 67468084,
+    componentId: 0,
+    definitionId: 0,
+    definition: { id: sourceId, name, sources: [{ sourceId, sourceType: 1 }] },
+  });
+  dump.responses[0].payload.data.feats = [
+    feat("Great Weapon Fighting", 145), // PHB 2024 : affiché par la feuille
+    feat("Dark Bargain", 193), // campagne : jamais rendu par la feuille
+    feat("Runestones", 239),
+  ];
+  dump.responses.push({
+    url: "https://character-service.dndbeyond.com/character/v5/rule-data?v=test",
+    status: 200,
+    payload: {
+      data: {
+        sources: [
+          { id: 145, name: "PHB-2024", description: "Player’s Handbook" },
+          { id: 193, name: "TCMP1", description: "The Crooked Moon Part One" },
+          { id: 239, name: "NS", description: "Northlands Sagas" },
+        ],
+      },
+    },
+  });
+  return JSON.stringify(dump);
+}
+
+const CAMPAIGN_RULES = { excludeFeatureSources: ["TCMP1", "NWB", "NS"] };
+
+test("extractCharacter sans règles : tous les feats (comportement par défaut inchangé)", () => {
+  const c = extractCharacter(buildDumpWithFeats(), "export.json");
+  assert.deepEqual(
+    c.features.map((f) => f.name),
+    ["Great Weapon Fighting", "Dark Bargain", "Runestones"],
+  );
+});
+
+test("extractCharacter avec excludeFeatureSources : les feats de campagne sont écartés", () => {
+  const c = extractCharacter(buildDumpWithFeats(), "export.json", { rules: CAMPAIGN_RULES });
+  assert.deepEqual(c.features.map((f) => f.name), ["Great Weapon Fighting"]);
+});
+
+test("extractCharacter avec excludeFeatures : filtre par nom, quel que soit l'ouvrage", () => {
+  const c = extractCharacter(buildDumpWithFeats(), "export.json", {
+    rules: { excludeFeatures: ["dark bargain"] },
+  });
+  assert.deepEqual(c.features.map((f) => f.name), ["Great Weapon Fighting", "Runestones"]);
+});
+
+test("un feat sans source résolue ou sans sources passe toujours (pas de filtre par excès)", () => {
+  const dump = JSON.parse(buildDump()) as {
+    responses: { payload: { data: Record<string, unknown> } }[];
+  };
+  dump.responses[0].payload.data.feats = [
+    { definition: { name: "Mystery Feat", sources: [{ sourceId: 999999 }] } },
+    { definition: { name: "Sourceless Feat", sources: [] } },
+  ];
+  const c = extractCharacter(JSON.stringify(dump), "export.json", { rules: CAMPAIGN_RULES });
+  assert.deepEqual(c.features.map((f) => f.name), ["Mystery Feat", "Sourceless Feat"]);
+});
+
+test("sourcesFromDump lit la réponse rule-data ; absente = map vide", () => {
+  const dump = JSON.parse(buildDumpWithFeats()) as import("../src/index.js").ApiExport;
+  assert.equal(sourcesFromDump(dump).get(145)?.name, "PHB-2024");
+  const emptyDump = JSON.parse(buildDump()) as import("../src/index.js").ApiExport;
+  assert.equal(sourcesFromDump(emptyDump).size, 0);
+});
+
+test("normalizeExtractRules rejette les clés inconnues et les listes invalides", () => {
+  assert.deepEqual(normalizeExtractRules({}), { excludeFeatureSources: [], excludeFeatures: [] });
+  assert.throws(() => normalizeExtractRules({ excludeOther: [] }), /clé inattendue/);
+  assert.throws(() => normalizeExtractRules({ excludeFeatures: [42] }), /liste de chaînes/);
+});
+
+test("loadExtractRules : erreur claire sur un fichier absent ou invalide", () => {
+  assert.throws(() => loadExtractRules(join(here, "inexistant.json")), /Impossible de lire le fichier de règles/);
 });
 
 console.log(`\n${passed} tests passés`);

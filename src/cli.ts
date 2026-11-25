@@ -3,25 +3,35 @@
  * CLI : dnd-dom-extract <export-tampermonkey.json> [-o sortie.json]
  * Analyse l'unique export Tampermonkey (responses[] + domHtml) et écrit le JSON.
  */
+import { existsSync } from "node:fs";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import process from "node:process";
 import { extractCharacter } from "./index.js";
+import { loadExtractRules, normalizeExtractRules, type ExtractRules } from "./rules.js";
+
+/** Règles de filtrage par défaut : rules.json à la racine du projet. */
+export const DEFAULT_RULES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "..", "rules.json");
 
 interface ParsedArgs {
   inputs: string[];
   output: string | null;
+  rules: string | null;
   help: boolean;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { inputs: [], output: null, help: false };
+  const args: ParsedArgs = { inputs: [], output: null, rules: null, help: false };
   const rest = argv.slice(2);
   for (let i = 0; i < rest.length; i++) {
     switch (rest[i]) {
       case "-o":
       case "--output":
         args.output = rest[++i];
+        break;
+      case "--rules":
+        args.rules = rest[++i];
         break;
       case "-h":
       case "--help":
@@ -49,8 +59,20 @@ Source : l'unique export JSON du userscript Tampermonkey v5 —
 
 Options:
   -o, --output <fichier>   Fichier JSON de sortie (défaut : stdout)
+  --rules <fichier>        Règles de filtrage JSON (excludeFeatureSources /
+                           excludeFeatures). Défaut : rules.json à la racine
+                           du projet si présent, sinon aucun filtrage.
   -h, --help               Affiche cette aide
 `;
+
+/** Charge les règles : --rules explicite, sinon rules.json par défaut s'il
+ *  existe, sinon aucun filtrage. Les règles implicites absentes ne sont pas
+ *  une erreur (le filtrage est optionnel par nature). */
+function loadRules(overrides: string | null): ExtractRules {
+  const path = overrides ?? (existsSync(DEFAULT_RULES_PATH) ? DEFAULT_RULES_PATH : null);
+  if (!path) return normalizeExtractRules({});
+  return loadExtractRules(path);
+}
 
 export function run(argv: string[]): { code: number; output?: string } {
   const args = parseArgs(argv);
@@ -67,7 +89,7 @@ export function run(argv: string[]): { code: number; output?: string } {
   const inputPath = resolve(args.inputs[0]);
   const source = readFileSync(inputPath, "utf8");
 
-  const character = extractCharacter(source, inputPath);
+  const character = extractCharacter(source, inputPath, { rules: loadRules(args.rules) });
   const json = JSON.stringify(character, null, 2);
 
   if (args.output) {

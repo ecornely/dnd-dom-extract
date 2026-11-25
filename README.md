@@ -63,6 +63,38 @@ import { extractCharacter } from "dnd-dom-extract";
 const character = extractCharacter(jsonString, "export.json");
 ```
 
+## Filtrage (rules.json)
+
+Le payload character-service contient des données absentes de la fiche :
+contenu de campagne/homerbew partagé injecté par le MJ (ex. les
+« Circle Spell: ... », Dark Bargain, Character Threads, Runestones). Le
+payload ne porte aucun flag « entitlement » exploitable
+(`activeSourceCategories` liste toutes les sources de campagne, possédées ou
+non). Un fichier `rules.json` à la racine du projet (sur le modèle des rules
+de traduction de `dnd-translator`) permet de les écarter des « Capacités et
+traits » :
+
+```json
+{
+  "excludeFeatureSources": ["TCMP1", "NWB", "NS"],
+  "excludeFeatures": []
+}
+```
+
+| Clé | Effet |
+|---|---|
+| `excludeFeatureSources` | écarte les feats dont TOUTES les sources (`definition.sources[].sourceId` résolu via la réponse `rule-data` du dump) appartiennent à ces ouvrages (code `sources[].name` ou titre `description`) |
+| `excludeFeatures` | écarte les feats par nom exact, quel que soit l'ouvrage |
+
+Le CLI le charge par défaut (`--rules <fichier>` pour un autre fichier ;
+absent, aucun filtrage) et l'API le reçoit via
+`extractCharacter(source, sourceRef, { rules })`. Un feat sans source
+résolue ou dont une source n'est pas dans la liste passe toujours : le
+filtre ne peut jamais écarter par excès. Constaté sur les samples v5 : les
+feats réels (Great Weapon Fighting, Savage Attacker, Weapon Mastery) sortent
+du PHB 2024 (`PHB-2024`), le contenu de campagne des ouvrages `TCMP1`
+(Crooked Moon), `NWB` (Northlands Worldbook) et `NS` (Northlands Sagas).
+
 ## Tests
 
 ```bash

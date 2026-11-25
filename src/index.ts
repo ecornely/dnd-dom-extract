@@ -8,11 +8,13 @@ import {
   type ApiExport,
 } from "./api.js";
 import { extractFromDom, mapActionsFromDom } from "./dom.js";
+import { EMPTY_RULES, sourcesFromDump, type ExtractRules } from "./rules.js";
 
 export * from "./schema.js";
 export * from "./tokens.js";
 export * from "./dom.js";
 export * from "./api.js";
+export * from "./rules.js";
 
 // Canaux historiques conservés comme bibliothèque (non câblés dans
 // extractCharacter) : JSON embarqué des pages complètes Ctrl+S.
@@ -30,14 +32,23 @@ export * from "./mapDdb.js";
  * Fusion sans écrasement : le champ rempli par une source n'est jamais
  * écrasé par l'autre, sauf pour les valeurs calculées où le DOM prime.
  */
-export function extractCharacter(source: string, sourceRef: string): Character {
+/**
+ * Options d'extraction : `rules` passe des règles de filtrage (rules.json)
+ * pour écarter le contenu de campagne non affiché par la feuille.
+ */
+export interface ExtractOptions {
+  rules?: ExtractRules;
+}
+
+export function extractCharacter(source: string, sourceRef: string, options: ExtractOptions = {}): Character {
   const extractedAt = new Date().toISOString();
   const dump: ApiExport = parseApiExport(source, sourceRef);
+  const rules = options.rules ?? EMPTY_RULES;
 
   let character: Character | null = null;
   const response = findCharacterApiResponse(dump);
   if (response) {
-    character = mapApiToCharacter(response.data, characterIdFromUrl(response.url), sourceRef, extractedAt);
+    character = mapApiToCharacter(response.data, characterIdFromUrl(response.url), sourceRef, extractedAt, rules, sourcesFromDump(dump));
   }
 
   if (dump.domHtml) {

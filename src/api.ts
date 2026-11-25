@@ -9,6 +9,7 @@ import type {
 } from "./schema.js";
 import { ABILITY_KEYS } from "./schema.js";
 import { abilityModifiers, abilityScoreValues, computeSpellcasting, computeSpellSlots, formatSpellDuration, formatSpellRange, spellIsDamaging, path, proficiencyBonusFromLevel, toNumber, toText } from "./util.js";
+import { EMPTY_RULES, featureAllowed, type ExtractRules } from "./rules.js";
 
 /**
  * Mapping de l'export API Tampermonkey (responses[] capturées de
@@ -427,13 +428,19 @@ function mapInventory(data: Record<string, unknown>): Character["equipment"] {
     .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
 }
 
-function mapFeatures(data: Record<string, unknown>): Feature[] {
+function mapFeatures(
+  data: Record<string, unknown>,
+  rules: ExtractRules = EMPTY_RULES,
+  sourcesById: Map<number, { name: string | null; description: string | null }> = new Map(),
+): Feature[] {
   const feats = looseArray(data.feats);
   return feats
     .map((entry): Feature | null => {
       const def = ((entry as { definition?: unknown }).definition ?? {}) as Record<string, unknown>;
       const name = toText(def.name);
       if (!name) return null;
+      // Contenu de campagne injecté non affiché par la feuille (rules.json).
+      if (!featureAllowed(def, rules, sourcesById)) return null;
       return { name, section: "FEATS", description: stripHtml(def.shortDescription ?? def.description) };
     })
     .filter((f): f is Feature => f !== null);
@@ -497,6 +504,8 @@ export function mapApiToCharacter(
   characterId: string | null,
   sourceRef: string,
   extractedAt: string,
+  rules: ExtractRules = EMPTY_RULES,
+  sourcesById: Map<number, { name: string | null; description: string | null }> = new Map(),
 ): Character {
   const notes = (data.notes ?? {}) as Record<string, unknown>;
   const background = (data.background ?? {}) as Record<string, unknown>;
@@ -574,7 +583,7 @@ export function mapApiToCharacter(
     actions: mapActions(data),
     defenses: mapDefenses(data),
     proficiencies: { ...mapProficienciesFromModifiers(data), languages: [] },
-    features: mapFeatures(data),
+    features: mapFeatures(data, rules, sourcesById),
     equipment: mapInventory(data),
     spells: mapSpells(data),
     spellSlots: computeSpellSlots(data),

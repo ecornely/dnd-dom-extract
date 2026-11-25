@@ -1,0 +1,7 @@
+{
+  "excludeFeatureSources": [
+    "TCMP1",
+    "NWB",
+    "NS"
+  ]
+}
