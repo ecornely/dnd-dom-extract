@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * CLI : dnd-dom-extract <source1.html> [api-export.json] [-o sortie.json]
- * Analyse des pages personnage D&D Beyond et/ou exports API et écrit le JSON.
+ * CLI : dnd-dom-extract <export-tampermonkey.json> [-o sortie.json]
+ * Analyse l'unique export Tampermonkey (responses[] + domHtml) et écrit le JSON.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
-import { extractCharacterFromSources } from "./index.js";
+import { extractCharacter } from "./index.js";
 
 interface ParsedArgs {
   inputs: string[];
@@ -34,18 +34,18 @@ function parseArgs(argv: string[]): ParsedArgs {
   return args;
 }
 
-const USAGE = `dnd-dom-extract — extrait un personnage D&D 5e d'une ou plusieurs sources D&D Beyond
+const USAGE = `dnd-dom-extract — extrait un personnage D&D 5e d'un export Tampermonkey
 
 Usage:
-  dnd-dom-extract <source...> [options]
-  # Exemples :
-  #   dnd-dom-extract page-personnage.html
-  #   dnd-dom-extract export-api.json
-  #   dnd-dom-extract export-api.json spells-tab.html -o oros.json
+  dnd-dom-extract <export-tampermonkey.json> [options]
+  # Exemple :
+  #   dnd-dom-extract export.json -o oros.json
 
-Sources : page HTML (Ctrl+S / body), export API Tampermonkey (json "responses"),
-  ou page complète (JSON embarqué characters["<id>"]). Les données brutes
-  viennent de l'API, les valeurs calculées (scores, saves, skills, CA...) du DOM.
+Source : l'unique export JSON du userscript Tampermonkey v5 —
+  { exportedAt, pageUrl, count, responses[], domHtml } — copié au presse-papier
+  (Ctrl+Shift+C) ou téléchargé (Ctrl+Alt+C) sur la fiche D&D Beyond.
+  Les données brutes viennent des réponses character-service (responses[]),
+  les valeurs calculées (scores, saves, skills, CA...) du DOM (domHtml).
 
 Options:
   -o, --output <fichier>   Fichier JSON de sortie (défaut : stdout)
@@ -57,16 +57,17 @@ export function run(argv: string[]): { code: number; output?: string } {
   if (args.help || args.inputs.length === 0) {
     return { code: args.help ? 0 : 1, output: USAGE };
   }
-
-  const sources: string[] = [];
-  const refs: string[] = [];
-  for (const input of args.inputs) {
-    const inputPath = resolve(input);
-    sources.push(readFileSync(inputPath, "utf8"));
-    refs.push(inputPath);
+  if (args.inputs.length !== 1) {
+    return {
+      code: 1,
+      output: `Un seul fichier attendu (l'export JSON Tampermonkey avec responses[] + domHtml). Reçu : ${args.inputs.join(", ")}\n`,
+    };
   }
 
-  const character = extractCharacterFromSources(sources, refs);
+  const inputPath = resolve(args.inputs[0]);
+  const source = readFileSync(inputPath, "utf8");
+
+  const character = extractCharacter(source, inputPath);
   const json = JSON.stringify(character, null, 2);
 
   if (args.output) {

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         D&D Beyond API Interceptor & DOM Clipboard Exporter
 // @namespace    https://github.com/custom-dnd-tools
-// @version      4.1.0
-// @description  Ctrl+Shift+C copies intercepted character-service JSON responses; Ctrl+Alt+C copies document.body.outerHTML.
+// @version      5.0.0
+// @description  Ctrl+Shift+C copies a single JSON (intercepted character-service responses + document.body.outerHTML in "domHtml") to the clipboard; Ctrl+Alt+C downloads that JSON.
 // @match        https://www.dndbeyond.com/*
 // @grant        unsafeWindow
 // @run-at       document-start
@@ -167,24 +167,41 @@
   }
 
   /**
+   * Character id parsed from the page URL (e.g. /characters/171883241/...)
+   */
+  function characterIdFromPage() {
+    const match = window.location.pathname.match(CHARACTER_PATH_REGEX);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Build the single export dump: intercepted API responses + body outerHTML.
+   * domHtml lets dnd-dom-extract get the calculated values (scores, saves,
+   * skills, AC, HP...) from the same file as the raw API data.
+   */
+  function buildExportDump() {
+    return {
+      exportedAt: new Date().toISOString(),
+      pageUrl: window.location.href,
+      count: capturedResponses.size,
+      responses: Array.from(capturedResponses.values()),
+      domHtml: document.body ? document.body.outerHTML : null
+    };
+  }
+
+  /**
    * Export all intercepted API responses to the clipboard
    */
-  async function handleApiMapExport() {
+  async function exportAndCopy() {
     if (capturedResponses.size === 0) {
       showToast("No character-service calls captured yet. Reload the page (F5).", "error");
       return;
     }
 
     try {
-      const dump = {
-        exportedAt: new Date().toISOString(),
-        pageUrl: window.location.href,
-        count: capturedResponses.size,
-        responses: Array.from(capturedResponses.values())
-      };
-
+      const dump = buildExportDump();
       await copyToClipboard(JSON.stringify(dump, null, 2));
-      showToast(`Copied ${capturedResponses.size} intercepted API call(s) to clipboard`, "success");
+      showToast(`Copied ${capturedResponses.size} intercepted API call(s) + DOM to clipboard`, "success");
     } catch (err) {
       console.error("[DDB Exporter] API copy failed:", err);
       showToast(`API copy failed: ${err.message}`, "error");
@@ -192,9 +209,29 @@
   }
 
   /**
-   * Export document.body.outerHTML to the clipboard
+   * Download the full export dump (API responses + DOM) as a JSON file
    */
-  async function handleDomExport() {
+  function downloadDump(dump) {
+    const characterId = characterIdFromPage();
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+    const filename = `ddb-export-${characterId ?? "unknown"}-${stamp}.json`;
+
+    const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return filename;
+  }
+
+  /**
+   * Download the single JSON export (API + DOM) instead of copying to clipboard
+   */
+  function exportAndDownload() {
     if (isCopyingDom) return;
     if (!document.body) {
       showToast("Document body is not ready yet.", "error");
@@ -203,13 +240,13 @@
 
     isCopyingDom = true;
     try {
-      showToast("Copying DOM outerHTML...", "info");
-      const bodyContent = document.body.outerHTML;
-      await copyToClipboard(bodyContent);
-      showToast(`Copied body outerHTML (${bodyContent.length} chars)`, "success");
+      showToast("Building export (API + DOM)...", "info");
+      const dump = buildExportDump();
+      const filename = downloadDump(dump);
+      showToast(`Downloaded ${filename} (${capturedResponses.size} API call(s) + body outerHTML)`, "success");
     } catch (err) {
-      console.error("[DDB Exporter] DOM copy failed:", err);
-      showToast(`DOM copy failed: ${err.message}`, "error");
+      console.error("[DDB Exporter] Download failed:", err);
+      showToast(`Download failed: ${err.message}`, "error");
     } finally {
       isCopyingDom = false;
     }
@@ -217,8 +254,8 @@
 
   /**
    * Keyboard shortcuts listener in capture phase
-   * - Ctrl+Shift+C: Copy intercepted API responses map
-   * - Ctrl+Alt+C: Copy document.body.outerHTML
+   * - Ctrl+Shift+C: Copy intercepted API responses + DOM to clipboard (single JSON)
+   * - Ctrl+Alt+C: Download the same single JSON export as a file
    */
   document.addEventListener(
     "keydown",
@@ -232,14 +269,16 @@
       if (event.shiftKey && !event.altKey) {
         event.preventDefault();
         event.stopPropagation();
-        handleApiMapExport();
+        document.querySelector('button[data-testid="SPELLS"]')?.click();
+        exportAndCopy();
         return;
       }
 
       if (event.altKey && !event.shiftKey) {
         event.preventDefault();
         event.stopPropagation();
-        handleDomExport();
+        document.querySelector('button[data-testid="SPELLS"]')?.click();
+        exportAndDownload();
       }
     },
     true

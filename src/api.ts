@@ -22,6 +22,8 @@ export interface ApiExport {
   exportedAt?: string;
   pageUrl?: string;
   count?: number;
+  /** body.outerHTML de la fiche, obligatoire dans le dump Tampermonkey v5. */
+  domHtml: string;
   responses?: {
     capturedAt?: string;
     url?: string;
@@ -31,14 +33,30 @@ export interface ApiExport {
   }[];
 }
 
-export function parseApiExport(raw: string): ApiExport | null {
+/** Format attendu du dump Tampermonkey (documenté dans le README). */
+export const API_DUMP_FORMAT =
+  '{ exportedAt, pageUrl, count, responses: [{ capturedAt, url, transport, status, payload }], domHtml }';
+
+/**
+ * Parse et valide l'unique format d'export : le JSON produit par le
+ * userscript v5 (Ctrl+Shift+C presse-papier / Ctrl+Alt+C téléchargement).
+ * Rejette tout autre entrée, notamment les anciens exports séparés v4.
+ */
+export function parseApiExport(raw: string, sourceRef = "export.json"): ApiExport {
+  let parsed: ApiExport | null = null;
   try {
-    const parsed = JSON.parse(raw) as ApiExport;
-    if (Array.isArray(parsed?.responses)) return parsed;
-    return null;
+    parsed = JSON.parse(raw) as ApiExport;
   } catch {
-    return null;
+    parsed = null;
   }
+  if (!parsed || !Array.isArray(parsed.responses) || typeof parsed.domHtml !== "string") {
+    throw new Error(
+      `"${sourceRef}" n'est pas un export Tampermonkey v5 attendu (${API_DUMP_FORMAT}). ` +
+        "Utilise Ctrl+Shift+C (presse-papier) ou Ctrl+Alt+C (téléchargement) " +
+        "du userscript sur la fiche D&D Beyond.",
+    );
+  }
+  return parsed;
 }
 
 /** Payload de type character/v5/character/<id> : le plus volumineux. */

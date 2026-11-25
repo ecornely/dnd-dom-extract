@@ -7,105 +7,51 @@ import {
   parseApiExport,
   type ApiExport,
 } from "./api.js";
-import { findEmbeddedCharacters } from "./embedded.js";
 import { extractFromDom } from "./dom.js";
-import { mapEmbeddedToCharacter } from "./mapDdb.js";
 
 export * from "./schema.js";
-export * from "./embedded.js";
 export * from "./tokens.js";
 export * from "./dom.js";
-export * from "./mapDdb.js";
 export * from "./api.js";
 
+// Canaux historiques conservés comme bibliothèque (non câblés dans
+// extractCharacter) : JSON embarqué des pages complètes Ctrl+S.
+export * from "./embedded.js";
+export * from "./mapDdb.js";
+
 /**
- * Extraction multi-sources, chacune pour ce qu'elle sait faire :
- * - API (export Tampermonkey JSON) : identité, apparence, notes, inventaire, sorts
- * - DOM (page enregistrée) : valeurs calculées (scores, saves, skills, CA, HP...)
- * - HTML page complète : JSON embarqué characters["<id>"]
+ * Extraction depuis l'unique format d'export : le JSON du userscript
+ * Tampermonkey v5 (Ctrl+Shift+C / Ctrl+Alt+C), composé de :
+ * - responses[] : réponses interceptées de character-service.dndbeyond.com
+ *   → données brutes (identité, apparence, notes, inventaire, sorts)
+ * - domHtml : body.outerHTML de la fiche au moment de l'export
+ *   → valeurs calculées (scores, saves, skills, CA, HP, vitesse...)
  *
- * Les sources ne se contredisent pas : le champ rempli par une source n'est
- * jamais écrasé par une autre, sauf pour les valeurs calculées où le DOM prime.
+ * Fusion sans écrasement : le champ rempli par une source n'est jamais
+ * écrasé par l'autre, sauf pour les valeurs calculées où le DOM prime.
  */
-export function extractCharacterFromSources(sources: string[], refs: string[]): Character {
-  if (sources.length === 0) throw new Error("Aucune source fournie.");
-  if (sources.length !== refs.length) throw new Error("sources et refs doivent avoir la même longueur.");
-
+export function extractCharacter(source: string, sourceRef: string): Character {
   const extractedAt = new Date().toISOString();
-  let character: Character | null = null;
-  let domHtml: { html: string; ref: string } | null = null;
+  const dump: ApiExport = parseApiExport(source, sourceRef);
 
-  for (let i = 0; i < sources.length; i++) {
-    const source = sources[i];
-    const ref = refs[i];
-    const characterPart = parseSingleSource(source, ref, extractedAt);
-    if (characterPart.type === "dom") {
-      if (characterPart.html) domHtml = { html: characterPart.html, ref };
-      continue;
-    }
-    character = mergeCharacters(character, characterPart.character);
+  let character: Character | null = null;
+  const response = findCharacterApiResponse(dump);
+  if (response) {
+    character = mapApiToCharacter(response.data, characterIdFromUrl(response.url), sourceRef, extractedAt);
   }
 
-  if (domHtml) {
-    const domCharacter = extractFromDom(domHtml.html, domHtml.ref, extractedAt);
+  if (dump.domHtml) {
+    const domCharacter = extractFromDom(dump.domHtml, sourceRef, extractedAt);
     character = mergeCharacters(character, domCharacter);
   }
 
   if (!character) {
     throw new Error(
-      `Aucun personnage détecté dans [${refs.join(", ")}] : ni export API ` +
-        "(json avec responses), ni page D&D Beyond, ni fiche avec ancres connues.",
+      `Aucun personnage détecté dans "${sourceRef}" : le dump ne contient ni réponse ` +
+        "character-service exploitable (responses[]), ni fiche D&D Beyond dans domHtml.",
     );
   }
   return character;
-}
-
-type SingleSourceResult =
-  | { type: "character"; character: Character }
-  | { type: "dom"; html: string };
-
-function parseSingleSource(source: string, ref: string, extractedAt: string): SingleSourceResult {
-  const trimmed = source.trim();
-
-  // Export API Tampermonkey : JSON avec responses[]
-  if (trimmed.startsWith("{")) {
-    const apiExport: ApiExport | null = parseApiExport(trimmed);
-    if (apiExport) {
-      const response = findCharacterApiResponse(apiExport);
-      if (response) {
-        const characterId = characterIdFromUrl(response.url);
-        return {
-          type: "character",
-          character: mapApiToCharacter(response.data, characterId, ref, extractedAt),
-        };
-      }
-    }
-  }
-
-  // Page HTML
-  if (/<\s*(html|body|div|main|h1)/i.test(trimmed)) {
-    // JSON embarqué (page complète) prioritaire sur le DOM visible
-    const embedded = findEmbeddedCharacters(trimmed);
-    if (embedded.length > 0) {
-      const best = embedded.reduce((a, b) =>
-        JSON.stringify(b.data).length > JSON.stringify(a.data).length ? b : a,
-      );
-      return {
-        type: "character",
-        character: mapEmbeddedToCharacter(best.data, best.characterId, ref, extractedAt),
-      };
-    }
-    const hasAnchors = /Saving Throw|Passive Perception|Armor Class|Proficiency|dndbeyond/i.test(trimmed);
-    if (!hasAnchors) {
-      throw new Error(
-        `Aucun personnage détecté dans "${ref}". Ce fichier ne semble pas être ` +
-          "une page personnage D&D Beyond enregistrée.",
-      );
-    }
-    return { type: "dom", html: trimmed };
-  }
-
-  throw new Error(`Source "${ref}" non reconnue : ni export API JSON, ni page HTML.`);
 }
 
 /**
@@ -170,9 +116,4 @@ export function mergeCharacters(base: Character | null, incoming: Character): Ch
   primary.classes = primary.classes.length ? primary.classes : secondary.classes;
   if (!primary.spellcasting?.length) primary.spellcasting = secondary.spellcasting;
   return primary;
-}
-
-/** Un seul fichier en entrée : passe par extractCharacterFromSources. */
-export function extractCharacter(source: string, sourceRef: string): Character {
-  return extractCharacterFromSources([source], [sourceRef]);
 }
