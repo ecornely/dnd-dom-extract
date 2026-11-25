@@ -109,6 +109,19 @@ export interface HitPoints {
   temp: number | null;
 }
 
+/**
+ * Capacités qui consomment une « action » au sens large (tab Actions de
+ * D&D Beyond). Noms seuls, groupés par le filtre du tab : coût d'activation
+ * API (activation.activationType) — 1 = Action, 2 = Action bonus,
+ * 3 = Réaction, le reste (0, 4-8, absent) = autre/special.
+ */
+export interface CharacterActions {
+  action: string[];
+  bonusAction: string[];
+  reaction: string[];
+  other: string[];
+}
+
 export interface Character {
   meta: {
     source: "embedded-json" | "dom" | "api";
@@ -154,6 +167,7 @@ export interface Character {
     pp: number | null;
   } | null;
   attacks: Attack[];
+  actions: CharacterActions;
   defenses: {
     resistances: Defense[];
     immunities: Defense[];

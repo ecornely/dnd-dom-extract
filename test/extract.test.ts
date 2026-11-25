@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { extractCharacter, extractFromDom, findEmbeddedCharacters } from "../src/index.js";
+import { extractCharacter, extractFromDom, findEmbeddedCharacters, mapActions, mapActionsFromDom } from "../src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixturePath = join(here, "..", "fixtures", "mock-beyond-sheet.html");
@@ -129,6 +129,67 @@ test("ancres DOM (fixture) : identité, caractéristiques, compétences", () => 
   assert.deepEqual(c.hp, { current: 19, max: 19, temp: null });
   assert.equal(c.speed, "30 ft.");
   assert.equal(c.proficiencyBonus, 2);
+});
+
+// ---------- Actions (tab Actions DDB) : mapping JSON (repli) ----------
+
+test("mapActions (JSON, repli) : noms groupés par activationType, doublons et custom inclus", () => {
+  const dump = JSON.parse(buildDump()) as {
+    responses: { payload: { data: Record<string, unknown> } }[];
+  };
+  dump.responses[0].payload.data.actions = {
+    class: [
+      { name: "Sneak Attack", activation: { activationType: 8 } },
+      { name: "Cunning Action", activation: { activationType: 2 } },
+    ],
+    race: [{ name: "Hellish Rebuke", activation: { activationType: 3 } }],
+    background: null,
+    item: [{ name: "Chance écrasante", activation: { activationType: 1 } }],
+  };
+  dump.responses[0].payload.data.customActions = [
+    { name: "Chance écrasante", activation: { activationType: 1 } },
+  ];
+
+  assert.deepEqual(mapActions(dump.responses[0].payload.data), {
+    action: ["Chance écrasante"],
+    bonusAction: ["Cunning Action"],
+    reaction: ["Hellish Rebuke"],
+    other: ["Sneak Attack"],
+  });
+  assert.deepEqual(mapActions({}), { action: [], bonusAction: [], reaction: [], other: [] });
+});
+
+// ---------- Actions (tab Actions DDB) : le DOM de la feuille prime ----------
+
+test("mapActionsFromDom : groupage de la feuille, standards écartés, annotations nettoyées", () => {
+  assert.deepEqual(mapActionsFromDom(fixtureHtml), {
+    action: [], // Unarmed Strike / Attack / Dash : standard, écartés
+    bonusAction: ["Two-Weapon Fighting", "Wild Shape"],
+    reaction: ["Absorb Elements"], // le sort réaction caché dans Spells
+    other: ["Sneak Attack"], // annotation (Special) nettoyée
+  });
+});
+
+test("export v5 : les actions du DOM priment sur le JSON (erreur d'activation + contenu non possédé)", () => {
+  // Le payload character-service place Wild Shape en activationType réaction
+  // et expose des entrées « Circle Spell » venant de livres non possédés ;
+  // la feuille (domHtml) les corrige/filtre toutes les deux.
+  const dump = JSON.parse(buildDump()) as {
+    responses: { payload: { data: Record<string, unknown> } }[];
+  };
+  dump.responses[0].payload.data.actions = {
+    class: [
+      { name: "Wild Shape", activation: { activationType: 3 } }, // serait une réaction côté JSON
+      { name: "Circle Spell: Augment", activation: { activationType: 8 } },
+    ],
+  };
+  const c = extractCharacter(JSON.stringify(dump), "export.json");
+  assert.deepEqual(c.actions, {
+    action: [],
+    bonusAction: ["Two-Weapon Fighting", "Wild Shape"],
+    reaction: ["Absorb Elements"],
+    other: ["Sneak Attack"],
+  });
 });
 
 // ---------- Dump combiné v5 : API + DOM dans un seul fichier ----------

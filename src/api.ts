@@ -2,6 +2,7 @@ import type {
   AbilityKey,
   Attack,
   Character,
+  CharacterActions,
   CharacterClass,
   Feature,
   Spell,
@@ -313,6 +314,46 @@ function mapHitDice(data: Record<string, unknown>): string | null {
   );
 }
 
+/**
+ * Tab Actions de D&D Beyond : data.actions (groupes race/class/background/
+ * feat/item/condition) + data.customActions (entrées maison du joueur).
+ * Noms seuls, répartis par coût d'activation — les attaques d'armes sont
+ * déjà dans Character.attacks et les sorts (action bonus, réaction) dans
+ * Character.spells avec leur castingTime.
+ */
+export function mapActions(data: Record<string, unknown>): CharacterActions {
+  const buckets: Record<keyof CharacterActions, Set<string>> = {
+    action: new Set<string>(),
+    bonusAction: new Set<string>(),
+    reaction: new Set<string>(),
+    other: new Set<string>(),
+  };
+  const push = (entry: unknown): void => {
+    const a = entry as { name?: unknown; activation?: { activationType?: unknown } } | null;
+    const name = toText(a?.name);
+    if (!name) return;
+    const type = toNumber(a?.activation?.activationType);
+    const key: keyof CharacterActions = type === 1 ? "action" : type === 2 ? "bonusAction" : type === 3 ? "reaction" : "other";
+    buckets[key].add(name);
+  };
+  // data.actions = un objet { race, class, background, item, feat, ... }
+  const actions = (data.actions ?? null) as Record<string, unknown> | null;
+  if (actions) {
+    for (const list of Object.values(actions)) {
+      for (const entry of looseArray(list)) push(entry);
+    }
+  }
+  for (const entry of looseArray(data.customActions)) push(entry);
+  const sorted = (set: Set<string>): string[] =>
+    Array.from(set).sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+  return {
+    action: sorted(buckets.action),
+    bonusAction: sorted(buckets.bonusAction),
+    reaction: sorted(buckets.reaction),
+    other: sorted(buckets.other),
+  };
+}
+
 function mapSpells(data: Record<string, unknown>): Spell[] {
   const spells: Spell[] = [];
   const seen = new Set<string>();
@@ -530,6 +571,7 @@ export function mapApiToCharacter(
         }
       : null,
     attacks: mapAttacks(data),
+    actions: mapActions(data),
     defenses: mapDefenses(data),
     proficiencies: { ...mapProficienciesFromModifiers(data), languages: [] },
     features: mapFeatures(data),

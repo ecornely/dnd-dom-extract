@@ -7,7 +7,7 @@ import {
   parseApiExport,
   type ApiExport,
 } from "./api.js";
-import { extractFromDom } from "./dom.js";
+import { extractFromDom, mapActionsFromDom } from "./dom.js";
 
 export * from "./schema.js";
 export * from "./tokens.js";
@@ -43,6 +43,13 @@ export function extractCharacter(source: string, sourceRef: string): Character {
   if (dump.domHtml) {
     const domCharacter = extractFromDom(dump.domHtml, sourceRef, extractedAt);
     character = mergeCharacters(character, domCharacter);
+    // Les actions viennent du tab Actions de la feuille (groupage et
+    // entitlement justes), jamais du JSON classique (activationType décalé et
+    // contenu de livres non possédés) — le mapping JSON reste un repli.
+    const domActions = mapActionsFromDom(dump.domHtml);
+    if (Object.values(domActions).some((v) => v.length > 0)) {
+      character.actions = domActions;
+    }
   }
 
   if (!character) {
@@ -91,6 +98,7 @@ export function mergeCharacters(base: Character | null, incoming: Character): Ch
   if (primary.deathSaves === null) primary.deathSaves = secondary.deathSaves;
   if (primary.coins === null) primary.coins = secondary.coins;
   if (primary.attacks.length === 0) primary.attacks = secondary.attacks;
+  if (Object.values(primary.actions).every((v) => v.length === 0)) primary.actions = secondary.actions;
   if (primary.defenses.resistances.length === 0) primary.defenses = secondary.defenses;
   if (Object.values(primary.proficiencies).every((v) => v.length === 0)) {
     primary.proficiencies = secondary.proficiencies;

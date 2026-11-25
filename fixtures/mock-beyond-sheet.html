@@ -81,6 +81,29 @@
     </div>
     <div><span>Speed</span><span>Walking</span><span>30</span><span>ft.</span></div>
     <div><span>Proficiency</span><span>Bonus</span><span>+</span><span>2</span></div>
+
+    <!--
+      Tab Actions, tel que rendu par la feuille D&D Beyond (post-entitlement) :
+      quatre sections actions-list-header, capacités activables, sorts
+      rattachés, actions basiques (dont les standard, à écarter).
+    -->
+    <div class="actions-tab-fixture">
+      <div><div data-testid="actions-list-header">Actions • Attacks per Action: 1</div><div>
+        <div data-testid="actions-list-activatable-feature"><div class="ct-feature-snippet"><div class="ct-feature-snippet__heading">Unarmed Strike</div></div></div>
+        <div><span class="ct-basic-actions__action">Attack</span><span class="ct-basic-actions__action">Dash</span></div>
+      </div></div>
+      <div><div data-testid="actions-list-header">Bonus Actions</div><div>
+        <div data-testid="actions-list-activatable-feature"><div class="ct-feature-snippet"><div class="ct-feature-snippet__heading">Wild Shape</div></div></div>
+        <div><span class="ct-basic-actions__action">Two-Weapon Fighting</span></div>
+      </div></div>
+      <div><div data-testid="actions-list-header">Reactions</div><div>
+        <div><span class="ct-basic-actions__action">Opportunity Attack</span></div>
+        <div class="ct-feature-snippet__spells"><div class="ct-feature-snippet__spell"><div class="ct-feature-snippet__spell-summary"><span>Absorb Elements<span>(1st)</span></span></div></div></div>
+      </div></div>
+      <div><div data-testid="actions-list-header">Other</div><div>
+        <div data-testid="actions-list-activatable-feature"><div class="ct-feature-snippet"><div class="ct-feature-snippet__heading">Sneak Attack (Special)</div></div></div>
+      </div></div>
+    </div>
   </main>
 </body>
 </html>

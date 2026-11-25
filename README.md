@@ -43,7 +43,7 @@ Dans les deux cas, le fichier est identique :
 
 | Champ | Contenu | Utilisation par l'extraction |
 |---|---|---|
-| `responses[]` | réponses interceptées de character-service (payload `character/v5/character/<id>`, le plus volumineux, fait foi) | données brutes : identité, classe, race, apparence, notes, monnaie, inventaire, sorts, maîtrises, attaques, défenses |
+| `responses[]` | réponses interceptées de character-service (payload `character/v5/character/<id>`, le plus volumineux, fait foi) | données brutes : identité, classe, race, apparence, notes, monnaie, inventaire, sorts, maîtrises, attaques, actions, défenses |
 | `domHtml` | `document.body.outerHTML` de la fiche | valeurs calculées : scores, saves, skills, CA, initiative, HP, vitesse, sens, maîtrises d'armes |
 | `count`, `exportedAt`, `pageUrl` | métadonnées du dump | informatives |
 
@@ -69,9 +69,9 @@ const character = extractCharacter(jsonString, "export.json");
 npm test     # tsx test/extract.test.ts && tsc --noEmit
 ```
 
-- `fixtures/mock-beyond-sheet.html` : fausse fiche minimaliste (JSON embarqué + ancres) ; les tests construisent un dump v5 synthétique à partir de lui.
-- `samples/tampermonkey.js` : le userscript qui produit l'export.
-- Les `samples/*.json` réels (regénérés avec le userscript v5) servent de vérité terrain pour étendre le mapping.
+- `fixtures/mock-beyond-sheet.html` : fausse fiche minimaliste (JSON embarqué + ancres + tab Actions) ; les tests construisent un dump v5 synthétique à partir de lui.
+- `samples/tampermonkey.js` : le userscript qui produit l'export (v5.1 : révèle les onglets SPELLS puis ACTIONS avant la capture).
+- `samples/{damaia,oros,esther,elowen,nikanor}.json` : dumps v5 régénérés, vérité terrain pour étendre le mapping.
 
 ## Étendre (méthode)
 
@@ -80,4 +80,27 @@ npm test     # tsx test/extract.test.ts && tsc --noEmit
 3. Ajouter une fonction `mapXxx` ancrée sur du texte stable, jamais sur les classes.
 4. Câbler dans `extractFromDom` ou `mapApiToCharacter` + assertions de vérité terrain.
 
-À venir : parsing du tab spells DOM (casting time/DC calculés), actions, équipement détaillé.
+À venir : parsing du tab spells DOM (casting time/DC calculés), équipement détaillé.
+
+### Actions (tab Actions D&D Beyond)
+
+`Character.actions` (extrait de `data.actions` et `data.customActions`) liste
+les noms, groupés comme le filtre du tab : `action` (activationType 1),
+`bonusAction` (2), `reaction` (3), `other` (restes : special, free...). Les
+attaques d'armes restent dans `attacks` et les sorts à coût d'action dans
+`spells` (castingTime) — pas de doublon.
+
+**Attention (constaté sur captures v5)** : le mapping JSON est un simple repli.
+Les données character-service sont trompeuses : les class features y portent un
+`activationType` décalé (Wild Shape, Bardic Inspiration, Cunning Action — tous
+réellement «Bonus Action» sur la feuille — y sortent en réaction) et il peut
+contenir des capacités issues de livres non possédés (les « Circle Spell: ... »
+présentes dans le payload mais jamais rendues par la feuille). Depuis le
+userscript v5.1, `domHtml` est donc capturé sur le tab ACTIONS (le userscript
+clique SPELLS puis ACTIONS) et `Character.actions` est extrait de ce DOM
+(`mapActionsFromDom`) : groupage de la feuille, post-entitlement. On y écarte
+les actions standard 2024 (Attack, Dash, Dodge... Opportunity Attack,
+Unarmed Strike...) et les tables d'attaque (déjà documentées page 2) pour ne
+garder que le spécifique du personnage (les valeurs non vides remplacent le
+repli JSON). Pas besoin de config de filtres : la feuille applique déjà les
+droits d'accès, pas les données.

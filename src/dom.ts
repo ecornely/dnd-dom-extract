@@ -2,6 +2,7 @@ import { JSDOM } from "jsdom";
 import type {
   AbilityKey,
   Character,
+  CharacterActions,
   CharacterClass,
   Defense,
   ProficiencyType,
@@ -444,6 +445,7 @@ export function extractFromDom(html: string, sourceRef: string, extractedAt: str
     deathSaves: null,
     coins: null,
     attacks: [],
+    actions: { action: [], bonusAction: [], reaction: [], other: [] },
     defenses: mapDefensesFromDom(html),
     proficiencies: mapProficiencies(html),
     features: [],
@@ -454,5 +456,99 @@ export function extractFromDom(html: string, sourceRef: string, extractedAt: str
     appearance: null,
     backstory: null,
     allies: null,
+  };
+}
+
+/**
+ * Tab Actions de la feuille D&D Beyond (domHtml doit avoir été capturé avec
+ * cet onglet activé — le userscript le déclenche). C'est la source de vérité
+ * pour les actions : la feuille applique les règles courantes (Wild Shape et
+ * Bardic Inspiration y figurent en Bonus Actions, alors que le payload JSON
+ * les stocke avec activationType « réaction »), regroupe les attaques
+ * d'armes à part, et n'expose QUE le contenu auquel le compte a droit
+ * (les entrées character-service de livres non possédés n'apparaissent pas).
+ */
+const DOM_STANDARD_ACTIONS = new Set([
+  // Standard 2024 : le bloc « Actions in Combat » commun à toutes les fiches
+  "Attack",
+  "Dash",
+  "Disengage",
+  "Dodge",
+  "Grapple",
+  "Help",
+  "Hide",
+  "Improvise",
+  "Influence",
+  "Magic",
+  "Ready",
+  "Search",
+  "Shove",
+  "Study",
+  "Utilize",
+  "Interact with an Object",
+  "Opportunity Attack",
+  "Unarmed Strike",
+]);
+
+/** Strip les annotations de coût ajoutées par la feuille : « (Special) », « (No Action) »,
+ *  et les virgules de séparation collées au libellé (« Attack, »). */
+function cleanActionName(raw: string | null | undefined): string | null {
+  const name = (raw ?? "").replace(/\s+/g, " ").trim().replace(/[,;.]+$/, "").trim();
+  if (!name) return null;
+  return name.replace(/ \((?:Special|No Action|Free)\)$/, "").trim() || null;
+}
+
+/** « Actions • Attacks per Action: 1 » → action ; « Bonus Actions » → bonusAction... */
+function actionBucketFromHeader(raw: string | null | undefined): keyof CharacterActions | null {
+  const title = (raw ?? "").split("•")[0].replace(/\s+/g, " ").trim();
+  if (/^bonus/i.test(title)) return "bonusAction";
+  if (/^reaction/i.test(title)) return "reaction";
+  if (/^other/i.test(title)) return "other";
+  if (/^actions/i.test(title)) return "action";
+  return null;
+}
+
+export function mapActionsFromDom(html: string): CharacterActions {
+  const buckets: Record<keyof CharacterActions, Set<string>> = {
+    action: new Set<string>(),
+    bonusAction: new Set<string>(),
+    reaction: new Set<string>(),
+    other: new Set<string>(),
+  };
+  const dom = new JSDOM(html).window.document;
+  for (const header of dom.querySelectorAll('[data-testid="actions-list-header"]')) {
+    const bucket = actionBucketFromHeader(header.textContent);
+    const section = header.parentElement;
+    if (!bucket || !section) continue;
+    const push = (name: string | null): void => {
+      if (name) buckets[bucket].add(name);
+    };
+    // Capacités activables (dons, traits, capacités de classe)
+    for (const el of section.querySelectorAll(".ct-feature-snippet__heading")) {
+      const name = cleanActionName(el.textContent);
+      if (name && !DOM_STANDARD_ACTIONS.has(name)) push(name);
+    }
+    // Sorts rattachés (casting time action bonus / réaction, ex. Absorb Elements) :
+    // <span>Ne<span>(1st)</span></span> — on saute les spans de niveau.
+    for (const el of section.querySelectorAll(".ct-feature-snippet__spell-summary span")) {
+      if (/^\(/.test((el.textContent ?? "").trim())) continue;
+      const name = cleanActionName(el.firstChild?.textContent ?? el.textContent);
+      if (name) push(name);
+    }
+    // Actions basiques non standard (ex. Two-Weapon Fighting selon l'équipement)
+    for (const el of section.querySelectorAll(".ct-basic-actions__action")) {
+      const name = cleanActionName(el.textContent);
+      if (name && !DOM_STANDARD_ACTIONS.has(name)) push(name);
+    }
+    // Les tables d'attaque (atk d'armes, cantrips offensifs) sont écartées :
+    // la page 2 les documente dans sa table Attaques / sorts.
+  }
+  const sorted = (set: Set<string>): string[] =>
+    Array.from(set).sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+  return {
+    action: sorted(buckets.action),
+    bonusAction: sorted(buckets.bonusAction),
+    reaction: sorted(buckets.reaction),
+    other: sorted(buckets.other),
   };
 }

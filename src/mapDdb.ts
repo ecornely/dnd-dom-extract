@@ -10,7 +10,7 @@ import type {
   Skill,
   Spell,
 } from "./schema.js";
-import { mapAttacks, mapProficienciesFromModifiers, mapSize } from "./api.js";
+import { mapActions, mapAttacks, mapProficienciesFromModifiers, mapSize } from "./api.js";
 import { ABILITY_KEYS, ABILITY_LABELS } from "./schema.js";
 import { abilityFromId, computeSpellcasting, computeSpellSlots, firstPath, formatSpellDuration, looseArray, path, spellIsDamaging, toNumber, toText } from "./util.js";
 
@@ -357,6 +357,7 @@ export function mapEmbeddedToCharacter(
     // Le blob embarqué peut être imbriqué (characters["<id>"] → {data}) —
     // mapAttacks lit inventaire, stats, modifiers au niveau du personnage.
     attacks: mapAttacks((path(data, "data") ?? data) as Record<string, unknown>),
+    actions: mapActions((path(data, "data") ?? data) as Record<string, unknown>),
     defenses: {
       resistances: mapDefenses(data, "resistances"),
       immunities: mapDefenses(data, "immunities"),

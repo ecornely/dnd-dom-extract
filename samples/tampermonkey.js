@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         D&D Beyond API Interceptor & DOM Clipboard Exporter
 // @namespace    https://github.com/custom-dnd-tools
-// @version      5.0.0
-// @description  Ctrl+Shift+C copies a single JSON (intercepted character-service responses + document.body.outerHTML in "domHtml") to the clipboard; Ctrl+Alt+C downloads that JSON.
+// @version      5.1.0
+// @description  Ctrl+Shift+C copies a single JSON (character-service responses + the ACTIONS-tab body.outerHTML in "domHtml") to the clipboard; Ctrl+Alt+C downloads that JSON.
 // @match        https://www.dndbeyond.com/*
 // @grant        unsafeWindow
 // @run-at       document-start
@@ -232,13 +232,11 @@
    * Download the single JSON export (API + DOM) instead of copying to clipboard
    */
   function exportAndDownload() {
-    if (isCopyingDom) return;
     if (!document.body) {
       showToast("Document body is not ready yet.", "error");
       return;
     }
 
-    isCopyingDom = true;
     try {
       showToast("Building export (API + DOM)...", "info");
       const dump = buildExportDump();
@@ -250,6 +248,20 @@
     } finally {
       isCopyingDom = false;
     }
+  }
+
+  /**
+   * Reveal the tabs whose DOM the extractor relies on (spells + actions),
+   * then run the export once the ACTIONS tab is rendered: the actions tab
+   * carries the entitlement-filtered, correctly grouped action lists
+   * (dnd-dom-extract reads them from the dump's domHtml).
+   */
+  function revealTabsThen(action) {
+    document.querySelector('button[data-testid="SPELLS"]')?.click();
+    setTimeout(() => {
+      document.querySelector('button[data-testid="ACTIONS"]')?.click();
+      setTimeout(action, 800);
+    }, 400);
   }
 
   /**
@@ -269,16 +281,20 @@
       if (event.shiftKey && !event.altKey) {
         event.preventDefault();
         event.stopPropagation();
-        document.querySelector('button[data-testid="SPELLS"]')?.click();
-        exportAndCopy();
+        if (isCopyingDom) return;
+        isCopyingDom = true;
+        showToast("Revealing tabs, then copying export...", "info");
+        revealTabsThen(() => exportAndCopy().finally(() => (isCopyingDom = false)));
         return;
       }
 
       if (event.altKey && !event.shiftKey) {
         event.preventDefault();
         event.stopPropagation();
-        document.querySelector('button[data-testid="SPELLS"]')?.click();
-        exportAndDownload();
+        if (isCopyingDom) return;
+        isCopyingDom = true;
+        showToast("Revealing tabs, then building export...", "info");
+        revealTabsThen(() => exportAndDownload().finally(() => (isCopyingDom = false)));
       }
     },
     true
